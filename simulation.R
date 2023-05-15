@@ -1,12 +1,14 @@
 library(tidyverse)
 library(pbapply)
 
-simulation <- function(round) {
+load_dependencies <- function() {
     source("./generate_data.R")
     source("./estimation.R")
 
     library(grf)
+}
 
+simulation <- function(round) {
     data <- generate_data(1000, 3, 5, 1, c(1, 1.5, 2), c(1, 2, 3))
  
     est_ate_ipw <- ate_ipw(data, "Y", "D", c("X.1", "X.2", "X.3"))$ate
@@ -25,9 +27,12 @@ simulation <- function(round) {
 
 }
 
-cl <- parallel::makeCluster(8)
-parallel::clusterExport(cl, "simulation")
-pblapply(1:100, simulation, cl = cl) %>% bind_rows() -> simulation_result
+# Parallel clusters
+cl <- parallel::makeCluster(16)
+
+parallel::clusterExport(cl, c("load_dependencies", "simulation"))
+parallel::clusterEvalQ(cl, load_dependencies())
+simulation_result <- pblapply(1:100, simulation, cl = cl) %>% bind_rows()
 parallel::stopCluster(cl)
 
 saveRDS(simulation_result, "./simulation_result.rds")
