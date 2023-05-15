@@ -65,3 +65,15 @@ ate_aipw <- function(data, Y, D, X) {
         )
     )
 }
+
+ate_ols <- function(data, Y, D, X) {
+    # estimate ATE using OLS
+    formula <- build_formula(Y, c(D, X))
+    ate_ols <- coef(lm(formula, data = data))[2]
+
+    return(
+        list(
+            ate = ate_ols
+        )
+    )
+}
