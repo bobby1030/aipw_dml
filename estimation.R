@@ -1,7 +1,10 @@
 library(tidyverse)
 
-ate_ipw <- function(data, formula_pscore) {
+source("./tools.R")
+
+ate_ipw <- function(data, Y, D, X) {
     # estimate propensity score using LOESS
+    formula_pscore <- build_formula(D, X)
     pscore_fit <- loess(formula_pscore, data = data)$fitted
     data$pscore_fit <- pscore_fit
 
@@ -15,7 +18,8 @@ ate_ipw <- function(data, formula_pscore) {
         ) %>%
         summarize(
             ate_ipw = sum(weight * D * Y) - sum(weight * (1 - D) * Y)
-        )
+        ) %>% 
+        unlist()
 
     return(
         list(
@@ -25,8 +29,10 @@ ate_ipw <- function(data, formula_pscore) {
     )
 }
 
-ate_aipw <- function(data, formula_pscore, formula_response) {
+ate_aipw <- function(data, Y, D, X) {
     # estimate propensity score using LOESS
+    formula_pscore <- build_formula(D, X)
+    formula_response <- build_formula(Y, X)
     pscore_fit <- loess(formula_pscore, data = data)$fitted
     data$pscore_fit <- pscore_fit
 
@@ -47,7 +53,8 @@ ate_aipw <- function(data, formula_pscore, formula_response) {
         ) %>%
         summarize(
             ate_aipw = (sum(weight * D * Y) - sum(weight * (1 - D) * Y) - sum(scale * weighted_response)) / n()
-        )
+        ) %>% 
+        unlist()
 
     return(
         list(
