@@ -1,14 +1,16 @@
-generate_data <- function(n, p, tau, sigma, beta_pscore, beta_response, seed) {
+generate_data <- function(n, p, tau, sigma, beta_pscore, beta_response, seed = NULL) {
     # n: sample size
     # p: number of covariates
     # tau: treatment effect
     # sigma: variance of normal error
 
-    # TODO: need to accept formula to deal with high order case
+    # TODO: need to accept formula to deal with high order / non-linear case
     # beta_pscore: p * 1 coefficients on treatment status
     # beta_response: p * 1 coefficients on outcome response
 
-    set.seed(seed)
+    if (!is.null(seed)) {
+        set.seed(seed)
+    }
 
     # generate covariates
     X <- matrix(rnorm(n * p), nrow = n, ncol = p) # n * p matrix
