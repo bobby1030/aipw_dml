@@ -2,11 +2,9 @@ library(tidyverse)
 
 source("./tools.R")
 
-ate_ipw <- function(data, Y, D, X) {
-    # estimate propensity score using LOESS
-    formula_pscore <- build_formula(D, X)
-    pscore_fit <- loess(formula_pscore, data = data)$fitted
-    data$pscore_fit <- pscore_fit
+# TODO: Tackle with extreme pscore_fit (use only overlapping sample)
+ate_ipw <- function(data, pscore_fit) {
+    data <- cbind(data, pscore_fit)
 
     # estimate ATE using IPW
     ate_ipw <- data %>%
@@ -21,49 +19,27 @@ ate_ipw <- function(data, Y, D, X) {
         ) %>% 
         unlist()
 
-    return(
-        list(
-            ate = ate_ipw,
-            pscore_fit = pscore_fit
-        )
-    )
+    return(ate = ate_ipw)
 }
 
-ate_aipw <- function(data, Y, D, X) {
-    # estimate propensity score using LOESS
-    formula_pscore <- build_formula(D, X)
-    formula_response <- build_formula(Y, X)
-    pscore_fit <- loess(formula_pscore, data = data)$fitted
-    data$pscore_fit <- pscore_fit
+ate_aipw <- function(data, pscore_fit, response_treat_fit, response_contr_fit) {
 
-    # estimate response function using LOESS
-    response_model_treat <- loess(formula_response, data = data[data$D == 1, ])
-    response_model_contr <- loess(formula_response, data = data[data$D == 0, ])
-
-    data$response_fit_treat <- predict(response_model_treat, data)
-    data$response_fit_contr <- predict(response_model_contr, data)
+    data <- cbind(data, pscore_fit, response_treat_fit, response_contr_fit)
 
     # estimate ATE using AIPW
     ate_aipw <- data %>%
-        drop_na(pscore_fit, response_fit_treat, response_fit_contr) %>%
+        drop_na(pscore_fit, response_treat_fit, response_contr_fit) %>%
         mutate(
             weight = ifelse(D == 1, 1 / pscore_fit, 1 / (1 - pscore_fit)),
             scale = (D - pscore_fit) / (pscore_fit * (1 - pscore_fit)),
-            weighted_response = (1 - pscore_fit) * response_fit_treat + pscore_fit * response_fit_contr
+            weighted_response = (1 - pscore_fit) * response_treat_fit + pscore_fit * response_contr_fit
         ) %>%
         summarize(
             ate_aipw = (sum(weight * D * Y) - sum(weight * (1 - D) * Y) - sum(scale * weighted_response)) / n()
         ) %>% 
         unlist()
 
-    return(
-        list(
-            ate = ate_aipw,
-            pscore_fit = pscore_fit,
-            response_fit_treat = data$response_fit_treat,
-            response_fit_contr = data$response_fit_contr
-        )
-    )
+    return(ate_aipw)
 }
 
 ate_ols <- function(data, Y, D, X) {
@@ -71,9 +47,5 @@ ate_ols <- function(data, Y, D, X) {
     formula <- build_formula(Y, c(D, X))
     ate_ols <- coef(lm(formula, data = data))[2]
 
-    return(
-        list(
-            ate = ate_ols
-        )
-    )
+    return(ate_ols)
 }
