@@ -16,27 +16,27 @@ ate_ipw <- function(data, pscore_fit) {
         ) %>%
         summarize(
             ate_ipw = sum(weight * D * Y) - sum(weight * (1 - D) * Y)
-        ) %>% 
+        ) %>%
         unlist()
 
     return(ate = ate_ipw)
 }
 
 ate_aipw <- function(data, pscore_fit, response_treat_fit, response_contr_fit) {
-
     data <- cbind(data, pscore_fit, response_treat_fit, response_contr_fit)
 
     # estimate ATE using AIPW
     ate_aipw <- data %>%
         drop_na(pscore_fit, response_treat_fit, response_contr_fit) %>%
         mutate(
-            weight = ifelse(D == 1, 1 / pscore_fit, 1 / (1 - pscore_fit)),
-            scale = (D - pscore_fit) / (pscore_fit * (1 - pscore_fit)),
-            weighted_response = (1 - pscore_fit) * response_treat_fit + pscore_fit * response_contr_fit
+            tau_i = response_treat_fit - response_contr_fit,
+            correction =
+                D / pscore_fit * (Y - response_treat_fit)
+                    - (1 - D) / (1 - pscore_fit) * (Y - response_contr_fit)
         ) %>%
         summarize(
-            ate_aipw = (sum(weight * D * Y) - sum(weight * (1 - D) * Y) - sum(scale * weighted_response)) / n()
-        ) %>% 
+            ate_aipw = mean(tau_i + correction)
+        ) %>%
         unlist()
 
     return(ate_aipw)
