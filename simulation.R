@@ -10,16 +10,34 @@ load_dependencies <- function() {
 }
 
 simulation <- function(round) {
-    data <- generate_data(1000, 3, 5, 1, c(1, 1.5, 2), c(1, 2, 3))
-    nuisance_learners <- train_nuisance_learners(data, "Y", "D", c("X.1", "X.2", "X.3"))
-    nuisance <- nuisance_fitted_value(data, nuisance_learners)
+    num.folds <- 2
 
-    est_ate_ipw <- ate_ipw(data, nuisance$pscore_fit_lasso)
-    est_ate_aipw <- ate_aipw(data, nuisance$pscore_fit_lasso, nuisance$response_treat_fit_lasso, nuisance$response_contr_fit_lasso)
+    data <- generate_data(1000, 3, 5, 1, c(0.3, 0, 0), c(0.5, 1.5, 3))
+    fold <- rep(1:num.folds, length.out = nrow(data))
+    data <- cbind(data, fold)
+
+    est_ate_ipw <- numeric()
+    est_ate_aipw <- numeric()
+
+    # Crossfitting
+    for (k in 1:num.folds) {
+        train <- data[data$fold != k, ]
+        test <- data[data$fold == k, ]
+
+        nui_learners <- train_nuisance_learners(train, c("rf"), "Y", "D", c("X.1", "X.2", "X.3"))
+        nui <- nuisance_fitted_value(test, "rf", nui_learners)
+
+        est_ate_ipw[k] <- ate_ipw(test, nui$pscore_fit_rf)
+        est_ate_aipw[k] <- ate_aipw(test, nui$pscore_fit_rf, nui$response_treat_fit_rf, nui$response_contr_fit_rf)
+    }
+
+    # Take average of cross fitted ATE
+    est_ate_ipw <- mean(est_ate_ipw)
+    est_ate_aipw <- mean(est_ate_aipw)
+
     est_ate_ols <- ate_ols(data, "Y", "D", c("X.1", "X.2", "X.3"))
-
     forest <- causal_forest(data[c("X.1", "X.2", "X.3")], data$Y, data$D)
-    est_ate_forest <- average_treatment_effect(forest, target.sample = "overlap")[1]
+    est_ate_forest <- average_treatment_effect(forest, method = "AIPW")[1]
 
     list(
         ate_ipw = est_ate_ipw,
