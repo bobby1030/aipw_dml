@@ -22,7 +22,7 @@ generate_data <- function(n, p, tau, sigma, beta_pscore, beta_response, seed = N
     D <- rbinom(n, 1, pscore)
 
     # generate realized outcome
-    Y <- tau * D + X %*% beta_response + 5 * X[,1] * X[,2] + rnorm(n, 0, sigma)
+    Y <- tau * D + X %*% beta_response + 5 * X[, 1] * X[, 2] + rnorm(n, 0, sigma)
 
     # construct data frame
     data <- data.frame(
@@ -34,4 +34,3 @@ generate_data <- function(n, p, tau, sigma, beta_pscore, beta_response, seed = N
 
     return(data)
 }
-
