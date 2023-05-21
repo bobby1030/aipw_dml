@@ -16,7 +16,7 @@ learner_rf <- function(task) {
         num.trees = 2000,
         min.node.size = 5,
         sample.fraction = 0.5,
-        mtry = 3,
+        mtry = min(sqrt(task$ncol - 1) + 20, task$ncol - 1),
         num.threads = 8
     )
     learner$train(task)
