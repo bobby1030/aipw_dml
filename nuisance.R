@@ -1,5 +1,6 @@
 library(mlr3)
 library(mlr3learners)
+library(mlr3tuning)
 
 # Estimate nuisance function using LASSO
 learner_lasso <- function(task) {
@@ -24,7 +25,16 @@ learner_rf <- function(task) {
 
 # Esimate nuisance function using gradient boosting
 learner_xgboost <- function(task) {
-    learner <- lrn("regr.xgboost")
+    learner <- lrn(
+        "regr.xgboost",
+        nrounds = to_tune(100, 3000),
+        max_depth = 2,
+        eta = 0.01,
+        subsample = 0.5
+    )
+    # Tune hyperparameter with 10-fold CV
+    tuner <- tune(tnr("grid_search", resolution = 10, batch_size = 10), task, learner, rsmp("cv", folds = 10))
+    learner$param_set$values <- tuner$result_learner_param_vals
     learner$train(task)
     return(learner)
 }
