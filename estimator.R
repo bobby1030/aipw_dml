@@ -49,3 +49,13 @@ ate_ols <- function(data, Y, D, X) {
 
     return(ate_ols)
 }
+
+ate_plr <- function(data, Y, D, pscore_fit, response_fit) {
+    # estimate ATE using PLR
+    Y_resid <- data$Y - response_fit
+    D_resid <- data$D - pscore_fit
+
+    ate_plr <- coef(lm(Y_resid ~ D_resid - 1))[1]
+
+    return(ate_plr)
+}
