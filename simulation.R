@@ -64,8 +64,8 @@ simulation_setup <- function(rounds, lrn_type = "lasso", spec_variant = "both") 
         X_pscore <- paste("X", 1:10, sep = ".")
         X_resp <- paste("X", 1:10, sep = ".")
     } else if (spec_variant == "none") {
-        X_pscore <- paste("X", 5:10, sep = ".")
-        X_resp <- paste("X", 5:10, sep = ".")
+        X_pscore <- paste("X", 6:10, sep = ".")
+        X_resp <- paste("X", 6:10, sep = ".")
     }
 
     # Generate list of simulation samples
