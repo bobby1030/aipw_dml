@@ -42,15 +42,15 @@ ate_aipw <- function(data, pscore_fit, response_treat_fit, response_contr_fit) {
     return(ate_aipw)
 }
 
-ate_ols <- function(data, Y, D, X) {
+ate_ols <- function(data, X) {
     # estimate ATE using OLS
-    formula <- build_formula(Y, c(D, X))
+    formula <- build_formula("Y", c("D", X))
     ate_ols <- coef(lm(formula, data = data))[2]
 
     return(ate_ols)
 }
 
-ate_plr <- function(data, Y, D, pscore_fit, response_fit) {
+ate_plr <- function(data, pscore_fit, response_fit) {
     # estimate ATE using PLR
     Y_resid <- data$Y - response_fit
     D_resid <- data$D - pscore_fit

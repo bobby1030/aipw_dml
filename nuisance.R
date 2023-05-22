@@ -2,124 +2,85 @@ library(mlr3)
 library(mlr3learners)
 library(mlr3tuning)
 
-# Estimate nuisance function using LASSO
-learner_lasso <- function(task) {
-    learner <- lrn("regr.cv_glmnet", nfolds = 10)
-    learner$train(task)
+generate_nuisance_learner <- function(lnr.type) {
+    if (lnr.type == "lasso") {
+        learner <- lrn("regr.cv_glmnet", nfolds = 10)
+    } else if (lnr.type == "rf") {
+        learner <- lrn(
+            "regr.ranger",
+            num.trees = to_tune(2000, 4000),
+            min.node.size = 5,
+            sample.fraction = 0.5,
+            mtry.ratio = to_tune(0, 1),
+            num.threads = 4
+        )
+    } else if (lnr.type == "xgboost") {
+        learner <- lrn(
+            "regr.xgboost",
+            nrounds = to_tune(100, 3000),
+            max_depth = 2,
+            eta = 0.01,
+            subsample = 0.5
+        )
+    } else {
+        stop("Invalid learner type")
+    }
+
     return(learner)
 }
 
-# Estimate nuisance function using random forest
-learner_rf <- function(task) {
-    learner <- lrn(
-        "regr.ranger",
-        num.trees = 2000,
-        min.node.size = 5,
-        sample.fraction = 0.5,
-        mtry = min(sqrt(task$ncol - 1) + 20, task$ncol - 1),
-        num.threads = 8
+generate_nuisance_tasks <- function(data, Y, D, X_pscore, X_resp) {
+    task_pscore <- as_task_regr(data, D)$select(X_pscore)
+    task_resp <- as_task_regr(data, Y)$select(X_resp)
+    task_resp_0 <- as_task_regr(data[data$D == 0, ], Y)$select(X_resp)
+    task_resp_1 <- as_task_regr(data[data$D == 1, ], Y)$select(X_resp)
+
+    return(
+        list(
+            pscore = task_pscore,
+            resp = task_resp,
+            resp_0 = task_resp_0,
+            resp_1 = task_resp_1
+        )
     )
-    learner$train(task)
-    return(learner)
 }
 
-# Esimate nuisance function using gradient boosting
-learner_xgboost <- function(task) {
-    learner <- lrn(
-        "regr.xgboost",
-        nrounds = to_tune(100, 3000),
-        max_depth = 2,
-        eta = 0.01,
-        subsample = 0.5
-    )
+tune_learner <- function(learner, task) {
+    if (class(learner)[1] == "LearnerRegrCVGlmnet") {
+        # No need to tune LASSO
+        return(NA)
+    } else {
+        # Tune hyperparameter with 10-fold CV
+        tuner <- tune(tnr("grid_search", resolution = 20, batch_size = 10), task, learner, rsmp("cv", folds = 10))
+        param <- tuner$result_learner_param_vals
+        return(param)
+    }
+}
+
+tune_all_learners <- function(learner, tasks) {
+    # Tune hyperparameter with specific task, return parameter
+    tuned_params <- list()
+    for (t in seq_along(tasks)) {
+        tuned_params[[names(tasks)[t]]] <- tune_learner(learner, tasks[[t]])
+    }
+    return(tuned_params)
+}
+
+train_learner <- function(learner, task, param) {
     # Tune hyperparameter with 10-fold CV
-    tuner <- tune(tnr("grid_search", resolution = 10, batch_size = 10), task, learner, rsmp("cv", folds = 10))
-    learner$param_set$values <- tuner$result_learner_param_vals
+    if (!is.na(param)) {
+        learner$param_set$values <- param
+    }
     learner$train(task)
     return(learner)
 }
 
-# High-level function for fitting nuisance functions
-train_nuisance_learners <- function(data, learner_types, Y, D, X) {
-    task_pscore <- as_task_regr(data, target = D)$select(X)
-    task_response <- as_task_regr(data, target = Y)$select(X)
-    task_response_treat <- as_task_regr(data[data$D == 1, ], target = Y)$select(X)
-    task_response_contr <- as_task_regr(data[data$D == 0, ], target = Y)$select(X)
-
-    learners <- list()
-
-    if ("lasso" %in% learner_types) {
-        learners_lasso <- list(
-            pscore_lasso = learner_lasso(task_pscore),
-            response_lasso = learner_lasso(task_response),
-            response_treat_lasso = learner_lasso(task_response_treat),
-            response_contr_lasso = learner_lasso(task_response_contr)
-        )
-        learners <- c(learners, learners_lasso)
+train_all_learners <- function(learner, tasks, params, test_data) {
+    # Train learner with specific task, return prediction
+    preds <- list()
+    for (t in seq_along(tasks)) {
+        trained_learner <- train_learner(learner, tasks[[t]], params[[t]])
+        preds[[names(tasks)[t]]] <- trained_learner$predict_newdata(test_data)$response
     }
-
-    if ("rf" %in% learner_types) {
-        learners_rf <- list(
-            pscore_rf = learner_rf(task_pscore),
-            response_rf = learner_rf(task_response),
-            response_treat_rf = learner_rf(task_response_treat),
-            response_contr_rf = learner_rf(task_response_contr)
-        )
-        learners <- c(learners, learners_rf)
-    }
-
-    if ("xgboost" %in% learner_types) {
-        learners_xgboost <- list(
-            pscore_xgboost = learner_xgboost(task_pscore),
-            response_xgboost = learner_xgboost(task_response),
-            response_treat_xgboost = learner_xgboost(task_response_treat),
-            response_contr_xgboost = learner_xgboost(task_response_contr)
-        )
-        learners <- c(learners, learners_xgboost)
-    }
-
-    return(learners)
-}
-
-nuisance_fitted_value <- function(test, learner_types, trained_learners) {
-
-    fitted_values <- list()
-
-    if ("lasso" %in% learner_types) {
-        fitted_values <- c(
-            fitted_values,
-            list(
-                pscore_fit_lasso = predict(trained_learners$pscore_lasso, test),
-                response_fit_lasso = predict(trained_learners$response_lasso, test),
-                response_treat_fit_lasso = predict(trained_learners$response_treat_lasso, test),
-                response_contr_fit_lasso = predict(trained_learners$response_contr_lasso, test)
-            )
-        )
-    }
-
-    if ("rf" %in% learner_types) {
-        fitted_values <- c(
-            fitted_values,
-            list(
-                pscore_fit_rf = predict(trained_learners$pscore_rf, test),
-                response_fit_rf = predict(trained_learners$response_rf, test),
-                response_treat_fit_rf = predict(trained_learners$response_treat_rf, test),
-                response_contr_fit_rf = predict(trained_learners$response_contr_rf, test)
-            )
-        )
-    }
-
-    if ("xgboost" %in% learner_types) {
-        fitted_values <- c(
-            fitted_values,
-            list(
-                pscore_fit_xgboost = predict(trained_learners$pscore_xgboost, test),
-                response_fit_xgboost = predict(trained_learners$response_xgboost, test),
-                response_treat_fit_xgboost = predict(trained_learners$response_treat_xgboost, test),
-                response_contr_fit_xgboost = predict(trained_learners$response_contr_xgboost, test)
-            )
-        )
-    }
-
-    return(fitted_values)
+    return(preds)
 }

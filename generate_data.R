@@ -4,19 +4,18 @@ generate_data <- function(n = 2000, tau = 5) {
     # tau: treatment effect
     # sigma: variance of normal error
     p <- 10
-    sigma <- 1
 
     # generate covariates
     X <- matrix(rnorm(n * p), nrow = n, ncol = p) # n * p matrix
 
     # generate propensity score (normal cdf)
-    pscore <- pnorm(0.3 * X[, 1] + 0.3 * X[, 3] + 0.3 * X[, 5] + X[, 1] * X[, 3])
+    pscore <- pnorm(X[, 1] + X[, 3] + X[, 5] + X[, 1] * X[, 3])
 
     # generate treatment indicator
     D <- rbinom(n, 1, pscore)
 
     # generate realized outcome
-    Y <- tau * D + X[, 1] * X[, 2] + sin(pi * X[, 3] * X[, 4]) + 0.5 * exp(X[, 5]) + rnorm(n, 0, sigma)
+    Y <- tau * D + X[, 1] * X[, 2] + 4 * sin(pi * X[, 3] * X[, 4]) + exp(X[, 5]) + rnorm(n)
 
     # construct data frame
     data <- data.frame(

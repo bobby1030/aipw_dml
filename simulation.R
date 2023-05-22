@@ -1,58 +1,95 @@
 library(tidyverse)
-library(pbapply)
+library(progressr)
 
 load_dependencies <- function() {
     source("./generate_data.R")
-    source("./estimation.R")
+    source("./estimator.R")
     source("./nuisance.R")
 
     library(grf)
 }
 
-simulation <- function(round) {
-    num.folds <- 2
+simulate <- function(round, sample, num.folds = 2, learner, tuned_params, X_pscore, X_resp, prog = NULL) {
+    # num.folds: number of folds for crossfitting
 
-    data <- generate_data(1000, 3, 5, 1, c(0.3, 0, 0), c(0.5, 1.5, 3))
-    fold <- rep(1:num.folds, length.out = nrow(data))
-    data <- cbind(data, fold)
+    # Update progress bar
+    if (!is.null(prog)) {
+        prog(message = sprintf("Simulating... %g", round))
+    }
+
+    fold <- rep(1:num.folds, length.out = nrow(sample))
+    sample <- cbind(sample, fold)
 
     est_ate_ipw <- numeric()
     est_ate_aipw <- numeric()
+    est_ate_plr <- numeric()
 
     # Crossfitting
     for (k in 1:num.folds) {
-        train <- data[data$fold != k, ]
-        test <- data[data$fold == k, ]
+        train <- sample[sample$fold != k, ]
+        test <- sample[sample$fold == k, ]
 
-        nui_learners <- train_nuisance_learners(train, c("rf"), "Y", "D", c("X.1", "X.2", "X.3"))
-        nui <- nuisance_fitted_value(test, "rf", nui_learners)
+        tasks <- generate_nuisance_tasks(train, "Y", "D", X_pscore, X_resp)
+        pred <- train_all_learners(learner, tasks, tuned_params, test)
 
-        est_ate_ipw[k] <- ate_ipw(test, nui$pscore_fit_rf)
-        est_ate_aipw[k] <- ate_aipw(test, nui$pscore_fit_rf, nui$response_treat_fit_rf, nui$response_contr_fit_rf)
+        est_ate_ipw[k] <- ate_ipw(test, pred$pscore)
+        est_ate_aipw[k] <- ate_aipw(test, pred$pscore, pred$resp_1, pred$resp_0)
+        est_ate_plr[k] <- ate_plr(test, pred$pscore, pred$resp)
     }
 
     # Take average of cross fitted ATE
     est_ate_ipw <- mean(est_ate_ipw)
     est_ate_aipw <- mean(est_ate_aipw)
+    est_ate_plr <- mean(est_ate_plr)
 
-    est_ate_ols <- ate_ols(data, "Y", "D", c("X.1", "X.2", "X.3"))
-    forest <- causal_forest(data[c("X.1", "X.2", "X.3")], data$Y, data$D)
-    est_ate_forest <- average_treatment_effect(forest, method = "AIPW")[1]
+    est_ate_ols <- ate_ols(sample, X_resp)
 
-    list(
-        ate_ipw = est_ate_ipw,
-        ate_aipw = est_ate_aipw,
-        ate_ols = est_ate_ols,
-        ate_forest = est_ate_forest
+    return(
+        list(
+            ate_ipw = est_ate_ipw,
+            ate_aipw = est_ate_aipw,
+            ate_plr = est_ate_plr,
+            ate_ols = est_ate_ols
+        )
     )
 }
 
-# Parallel clusters
-cl <- parallel::makeCluster(16)
+simulation_setup <- function(rounds, lrn_type = "lasso", spec_variant = "both") {
+    # Set specifications
+    if (spec_variant == "pscore") {
+        X_pscore <- paste("X", 1:10, sep = ".") # All covariates
+        X_resp <- c("X.2", "X.4") # Wrongly specified
+    } else if (spec_variant == "resp") {
+        X_pscore <- c("X.2", "X.4")  # Wrongly specified
+        X_resp <- paste("X", 1:10, sep = ".") # All covariates
+    } else if (spec_variant == "both") {
+        X_pscore <- paste("X", 1:10, sep = ".")
+        X_resp <- paste("X", 1:10, sep = ".")
+    }
 
-parallel::clusterExport(cl, c("load_dependencies", "simulation"))
-parallel::clusterEvalQ(cl, load_dependencies())
-simulation_result <- pblapply(1:100, simulation, cl = cl) %>% bind_rows()
-parallel::stopCluster(cl)
+    # Generate list of simulation samples
+    sim_samples <- generate_sim_samples(S = rounds, n = 2000, tau = 5, seed = 20230522)
 
-saveRDS(simulation_result, "./simulation_result.rds")
+    # Tune hyperparameters using first sample of current DGP
+    cat("Tuning hyperparameter...")
+    data_tune <- sim_samples[[1]]
+    tasks <- generate_nuisance_tasks(data_tune, "Y", "D", X_pscore, X_resp)
+    learner <- generate_nuisance_learner(lrn_type)
+    tuned_params <- tune_all_learners(learner, tasks)
+
+    round <- 1:rounds
+
+    prog <- progressor(along = round)
+    simulation_result <- future.apply::future_lapply(
+        round,
+        function(r, prog) simulate(r, sim_samples[[r]], num.folds = 2, learner, tuned_params, X_pscore, X_resp, prog),
+        prog = prog,
+        future.seed = TRUE
+    ) %>% bind_rows()
+}
+
+future::plan(list("multisession", "multisession"), workers = 16)
+load_dependencies()
+simulation_result <- with_progress(simulation_setup(500, "lasso", "resp"))
+
+saveRDS(simulation_result, "./results/simulation_result.rds")
