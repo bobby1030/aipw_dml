@@ -1,4 +1,4 @@
-generate_data <- function(n = 2000, tau = 5, seed = NULL) {
+generate_data <- function(n = 2000, tau = 5) {
     # n: number of observations
     # p: number of covariates
     # tau: treatment effect
@@ -6,18 +6,11 @@ generate_data <- function(n = 2000, tau = 5, seed = NULL) {
     p <- 10
     sigma <- 1
 
-    # beta_pscore: p * 1 coefficients on treatment status
-    # beta_response: p * 1 coefficients on outcome response
-
-    if (!is.null(seed)) {
-        set.seed(seed)
-    }
-
     # generate covariates
     X <- matrix(rnorm(n * p), nrow = n, ncol = p) # n * p matrix
 
     # generate propensity score (normal cdf)
-    pscore <- pnorm(X[, 1] + X[, 3] + X[, 5] + X[, 1] * X[, 3])
+    pscore <- pnorm(0.3 * X[, 1] + 0.3 * X[, 3] + 0.3 * X[, 5] + X[, 1] * X[, 3])
 
     # generate treatment indicator
     D <- rbinom(n, 1, pscore)
@@ -34,4 +27,16 @@ generate_data <- function(n = 2000, tau = 5, seed = NULL) {
     )
 
     return(data)
+}
+
+generate_sim_samples <- function(S = 1000, n = 2000, tau = 5, seed = NULL) {
+    # S: number of simulations
+    
+    if (!is.null(seed)) {
+        set.seed(seed)
+    }
+
+    sim_samples <- lapply(1:S, function(x) generate_data(n, tau))
+
+    return(sim_samples)
 }
