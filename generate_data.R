@@ -1,10 +1,11 @@
-generate_data <- function(n, p, tau, sigma, beta_pscore, beta_response, seed = NULL) {
-    # n: sample size
+generate_data <- function(n = 2000, tau = 5, seed = NULL) {
+    # n: number of observations
     # p: number of covariates
     # tau: treatment effect
     # sigma: variance of normal error
+    p <- 10
+    sigma <- 1
 
-    # TODO: need to accept formula to deal with high order / non-linear case
     # beta_pscore: p * 1 coefficients on treatment status
     # beta_response: p * 1 coefficients on outcome response
 
@@ -16,13 +17,13 @@ generate_data <- function(n, p, tau, sigma, beta_pscore, beta_response, seed = N
     X <- matrix(rnorm(n * p), nrow = n, ncol = p) # n * p matrix
 
     # generate propensity score (normal cdf)
-    pscore <- pnorm(X %*% beta_pscore)
+    pscore <- pnorm(X[, 1] + X[, 3] + X[, 5] + X[, 1] * X[, 3])
 
     # generate treatment indicator
     D <- rbinom(n, 1, pscore)
 
     # generate realized outcome
-    Y <- tau * D + X %*% beta_response + 5 * X[, 1] * X[, 2] + rnorm(n, 0, sigma)
+    Y <- tau * D + X[, 1] * X[, 2] + sin(pi * X[, 3] * X[, 4]) + 0.5 * exp(X[, 5]) + rnorm(n, 0, sigma)
 
     # construct data frame
     data <- data.frame(
