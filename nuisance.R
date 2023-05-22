@@ -11,7 +11,7 @@ generate_nuisance_learner <- function(lnr.type) {
             num.trees = to_tune(2000, 4000),
             min.node.size = 5,
             sample.fraction = 0.5,
-            mtry.ratio = to_tune(0, 1),
+            mtry.ratio = 0.7,
             num.threads = 4
         )
     } else if (lnr.type == "xgboost") {
@@ -68,7 +68,7 @@ tune_all_learners <- function(learner, tasks) {
 
 train_learner <- function(learner, task, param) {
     # Tune hyperparameter with 10-fold CV
-    if (!is.na(param)) {
+    if (sum(!is.na(param)) > 0) {
         learner$param_set$values <- param
     }
     learner$train(task)
