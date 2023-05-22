@@ -5,8 +5,6 @@ load_dependencies <- function() {
     source("./generate_data.R")
     source("./estimator.R")
     source("./nuisance.R")
-
-    library(grf)
 }
 
 simulate <- function(round, sample, num.folds = 2, learner, tuned_params, X_pscore, X_resp, prog = NULL) {
@@ -65,6 +63,9 @@ simulation_setup <- function(rounds, lrn_type = "lasso", spec_variant = "both") 
     } else if (spec_variant == "both") {
         X_pscore <- paste("X", 1:10, sep = ".")
         X_resp <- paste("X", 1:10, sep = ".")
+    } else if (spec_variant == "none") {
+        X_pscore <- paste("X", 5:10, sep = ".")
+        X_resp <- paste("X", 5:10, sep = ".")
     }
 
     # Generate list of simulation samples
@@ -86,10 +87,6 @@ simulation_setup <- function(rounds, lrn_type = "lasso", spec_variant = "both") 
         prog = prog,
         future.seed = TRUE
     ) %>% bind_rows()
+
+    return(simulation_result)
 }
-
-future::plan(list("multisession", "multisession"), workers = 16)
-load_dependencies()
-simulation_result <- with_progress(simulation_setup(500, "lasso", "resp"))
-
-saveRDS(simulation_result, "./results/simulation_result.rds")
