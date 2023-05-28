@@ -6,10 +6,10 @@ generate_data <- function(n = 2000, tau = 5) {
     p <- 10
 
     # generate covariates
-    X <- matrix(rnorm(n * p), nrow = n, ncol = p) # n * p matrix
+    X <- matrix(rnorm(n * p, 1, 1), nrow = n, ncol = p) # n * p matrix
 
     # generate propensity score (normal cdf)
-    pscore <- pnorm(X[, 1] + X[, 3] + X[, 5] + X[, 1] * X[, 3])
+    pscore <- pnorm(scale(X[, 1] + X[, 3] + X[, 5] + X[, 1] * X[, 3]))
 
     # generate treatment indicator
     D <- rbinom(n, 1, pscore)
