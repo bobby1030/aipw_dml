@@ -1,0 +1,289 @@
+---
+title: "Augmented Inverse Probability Weighting and DML for Treatment Effect Estimation"
+subtitle: "ML and Econometrics Term Project"
+author: "Yu-Hsin Ho"
+date: "June 1, 2023"
+output: 
+    xaringan::moon_reader:
+        css: ["style.css", default]
+        nature:
+            highlightStyle: atom-one-light
+            highlightLines: true
+            countIncrementalSlides: false
+        lib_dir: libs
+---
+
+# Quick Recap of Motivation
+
+- We want to estimate the average treatment effect (ATE) of a binary treatment $D$ on an outcome $Y$
+- Usually assuming SUTVA, or selection-on-observables: $\{Y(1), Y(0)\} \perp D | X$
+- So we want to "control" for confounders $X$
+--
+
+- Usually this is done by linear regression
+  - `reg Y D X, r`
+- Problems: 
+    1. Relationship between $Y$ and $X$ is non-linear (specification error)
+    2. We have more confidence on $D(X)$ instead of $Y(X)$ (e.g. experimental study)
+
+---
+
+# Augmented Inverse Probability Weighting (AIPW)
+
+- Proposed by Robins, Rotnitzky, and Zhao (1994, JASA)
+- Propensity score: $m(X) = P(D = 1 | X)$
+- Response model: $g_d(X) = E[Y | X, D = d], \; d=0,1$
+- **Doubly-robustness**: consistent if either $m(x)$ or $g_d(X)$ are correctly specified
+
+$$\begin{aligned}
+\text{ATE}_{\text{AIPW}} = & g_1(X) - g_0(X) \\ 
+& + \frac{D(Y - g_1(X))}{m(X)} - \frac{(1-D)(Y - g_0(X))}{1-m(X)}
+\end{aligned}$$
+
+---
+
+layout: true
+
+# Simulation Study
+
+---
+
+### DGP
+
+$$\begin{aligned}
+&Y = \tau D + X_1 X_2 + 4 \sin(\pi X_3X_4 ) + \exp({X_5}) + \varepsilon \\
+&\mathbb{P}(D=1 | X) = m(X) = \Phi(X_1 + X_3 + X_5 + X_1 X_3) \\
+&D = \operatorname{Bernoulli}(m(x)) \\
+&X_p \sim N(1,1), \; p=1, \cdots, 10 ; \;\; \varepsilon \sim N(0,1) \\ 
+\end{aligned}$$
+
+- Treatment effect $\tau = 5$
+- Confounders are $X_1, X_3, X_5$. Modeling them is sufficient to recover ATE
+
+---
+
+### Estimating Nuisance Functions
+
+1. LASSO (`glmnet`)
+  - `lambda`: tuned by CV
+2. Random Forests (`ranger`)
+  - `num.trees`: tuned by CV $\in [2000,4000]$
+  - `mtry`: tuned by CV
+  - `sample.fraction` = 0.5
+3. Boosting (`xgboost`)
+  - `nrounds`: tuned by CV $\in [100,3000]$
+  - `max_depth` = 2,
+  - `eta` = 0.01
+
+
+---
+
+### Specifications
+
+| Spec     | Predictors in $m(X)$ | Predictors in $g(X)$ |
+|----------|:--------------------:|:--------------------:|
+| both     |  $X_1 \cdots X_{10}$ |  $X_1 \cdots X_{10}$ |
+| pscore   |  $X_1 \cdots X_{10}$ |  $X_6 \cdots X_{10}$ |
+| response |  $X_6 \cdots X_{10}$ |  $X_1 \cdots X_{10}$ |
+
+---
+
+### Estimators
+
+1. AIPW
+2. IPW: $\hat\tau = \frac{D Y}{m(X)} - \frac{(1-D)Y}{1-m(X)}$
+3. OLS: $Y = \hat\tau D + X' \hat\beta + \hat \varepsilon$
+4. PLS: $(Y - \hat g(X)) = \hat\tau (D - \hat m(X)) + \hat \varepsilon$
+
+--
+
+We get $3 \times 3 \times 4 = 36$ ATE estimates per simulation.
+
+---
+
+### Procedures
+
+---
+
+layout: false
+
+```{r load-results, echo=F, message=F, warning=F}
+library(tidyverse)
+library(ggridges)
+library(knitr)
+library(kableExtra)
+library(gt)
+
+opts_chunk$set(
+    echo = FALSE,
+    message = FALSE,
+    warning = FALSE,
+    fig.width = 9,
+    fig.height = 6,
+    fig.scale = 2,
+    dev = "svg",
+    fig.align = "center",
+    out.width = "100%"
+)
+
+ate_tau5 <- tibble()
+
+# Read results 
+for (spec in c("both", "pscore", "resp")) {
+    for (lrn_type in c("lasso", "rf", "xgboost")) {
+        result <- readRDS(sprintf("results/tau5/sim_result_%s_%s.rds", lrn_type, spec))
+        result$lrn_type <- lrn_type
+        result$spec <- spec
+        ate_tau5 <- bind_rows(ate_tau5, result)
+    }
+}
+
+estimator_factor <- list(
+    ate_ols = "OLS",
+    ate_plr = "PLR",
+    ate_ipw = "IPW",
+    ate_aipw = "AIPW"
+)
+
+lrn_type_factor <- list(
+    lasso = "LASSO",
+    rf = "RandomForest",
+    xgboost = "XGBoost"
+)
+
+ate_tau5_long <- ate_tau5 %>% 
+    pivot_longer(starts_with("ate"), names_to = "estimator", values_to = "ate") %>% 
+    mutate(
+      lrn_type = ordered(lrn_type, levels = names(lrn_type_factor), labels = lrn_type_factor),
+      estimator = ordered(estimator, levels = names(estimator_factor), labels = estimator_factor)
+    )
+
+plot_ate_dist <- function(df, true = 0) {
+  ggplot(df, aes(x = ate, y = estimator)) +
+    facet_grid(cols = vars(lrn_type)) +
+    geom_density_ridges(alpha = 0.6, panel_scaling = FALSE) +
+    geom_vline(xintercept = 5, linetype = "dashed") +
+    xlim(true - 2.5, true + 2.5) +
+    labs(
+      x = "ATE",
+      y = "Density",
+      color = "Estimator",
+      subtitle = sprintf("True ATE = %s", true),
+    ) +
+    # scale_y_discrete(labels = estimator_factor) +
+    theme_minimal(base_size = 16) +
+    theme(
+      legend.position = "bottom"
+    )
+}
+```
+
+# Results: Both specified correctly
+
+```{R ate-dist-both}
+ate_tau5_long %>% 
+  filter(spec == "both") %>%
+  plot_ate_dist(true = 5)
+```
+
+---
+
+# Results: pscore specified correctly
+
+```{R ate-dist-pscore}
+ate_tau5_long %>% 
+  filter(spec == "pscore") %>%
+  plot_ate_dist(true = 5)
+```
+
+---
+
+# Results: response specified correctly
+
+```{R ate-dist-response}
+ate_tau5_long %>% 
+  filter(spec == "resp") %>%
+  plot_ate_dist(true = 5)
+```
+
+---
+
+.scale80[
+```{R estimator-performance-both}
+ate_tau5_perf <- ate_tau5_long %>% 
+  group_by(spec, lrn_type, estimator) %>%
+  summarise(
+    Bias = mean(ate - 5),
+    RMSE = sqrt(mean((ate - 5)^2)),
+    S.D. = sd(ate)
+  )
+
+ate_tau5_perf %>% 
+  filter(spec == "both") %>%
+  gt() %>% 
+  fmt_number(decimals = 3)
+```
+]
+
+---
+
+.scale80[
+```{R estimator-performance-pscore}
+ate_tau5_perf %>% 
+  filter(spec == "pscore") %>%
+  gt() %>% 
+  fmt_number(decimals = 3)
+```
+]
+
+---
+
+.scale80[
+```{R estimator-performance-resp}
+ate_tau5_perf %>% 
+  filter(spec == "resp") %>%
+  gt() %>% 
+  fmt_number(decimals = 3)
+```
+]
+
+---
+
+# Empirical Size
+
+```{R empirical-size}
+source("empirical_size.R")
+
+ate_tau0 <- tibble()
+
+# Read results 
+for (spec in c("both", "pscore", "resp")) {
+    for (lrn_type in c("lasso", "rf", "xgboost")) {
+        result <- readRDS(sprintf("results/tau0/sim_result_%s_%s.rds", lrn_type, spec))
+        result$lrn_type <- lrn_type
+        result$spec <- spec
+        ate_tau0 <- bind_rows(ate_tau0, result)
+    }
+}
+
+size <- ate_tau0 %>% 
+  pivot_longer(starts_with("ate"), names_to = "estimator", values_to = "ate") %>% 
+  mutate(
+    lrn_type = ordered(lrn_type, levels = names(lrn_type_factor), labels = lrn_type_factor),
+    estimator = ordered(estimator, levels = names(estimator_factor), labels = estimator_factor)
+  ) %>% 
+  group_by(spec, lrn_type, estimator) %>%
+  group_modify(~ empirical_size(.x$ate, mu_null = 0))
+
+ggplot(size, aes(x = estimator, y = size)) +
+  facet_grid(spec ~ lrn_type) +
+  geom_point() +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  scale_y_continuous(breaks = c(0.05, seq(0.2, 1, 0.4))) +
+  labs(
+    x = "Estimator",
+    y = "Empirical size"
+  ) +
+  theme(text = element_text(size = 16), panel.spacing.y = unit(1.5, "lines"))
+
+```
