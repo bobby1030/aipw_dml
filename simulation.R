@@ -52,7 +52,7 @@ simulate <- function(round, sample, num.folds = 2, learner, tuned_params, X_psco
     )
 }
 
-simulation_setup <- function(rounds, lrn_type = "lasso", spec_variant = "both") {
+simulation_setup <- function(rounds, tau, lrn_type = "lasso", spec_variant = "both") {
     # Set specifications
     if (spec_variant == "pscore") {
         X_pscore <- paste("X", 1:10, sep = ".") # All covariates
@@ -69,7 +69,7 @@ simulation_setup <- function(rounds, lrn_type = "lasso", spec_variant = "both") 
     }
 
     # Generate list of simulation samples
-    sim_samples <- generate_sim_samples(S = rounds, n = 2000, tau = 5, seed = 20230522)
+    sim_samples <- generate_sim_samples(S = rounds, n = 2000, tau = tau, seed = 20230522)
 
     # Tune hyperparameters using first sample of current DGP
     cat("Tuning hyperparameter...")
