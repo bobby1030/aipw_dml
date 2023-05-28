@@ -16,7 +16,7 @@ sim_result_plot <- simulation_result %>%
     pivot_longer(starts_with("ate"), names_to = "estimator", values_to = "ate") %>%
     ggplot(aes(x = ate, color = estimator)) +
         facet_grid(vars(spec), vars(lrn_type)) +
-        geom_density(alpha = 0.1) +
+        geom_line(stat = "density", alpha = 0.7) +
         geom_point(
             aes(y = 0),
             data = . %>%
@@ -27,4 +27,4 @@ sim_result_plot <- simulation_result %>%
         xlim(0, 10) +
         theme_minimal()
 
-ggsave("./results/sim_result_plot.pdf", sim_result_plot, width = 10, height = 10, dpi = 300)
+ggsave("./results/sim_result_plot.pdf", sim_result_plot, width = 10, height = 6, dpi = 300)
