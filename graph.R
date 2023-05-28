@@ -16,7 +16,7 @@ sim_result_plot <- simulation_result %>%
     pivot_longer(starts_with("ate"), names_to = "estimator", values_to = "ate") %>%
     ggplot(aes(x = ate, color = estimator)) +
         facet_grid(vars(spec), vars(lrn_type)) +
-        geom_density(alpha = 0.1) +
+        geom_line(stat = "density", alpha = 0.7) +
         geom_point(
             aes(y = 0),
             data = . %>%
