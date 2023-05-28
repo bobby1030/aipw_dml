@@ -11,7 +11,7 @@ generate_nuisance_learner <- function(lnr.type) {
             num.trees = to_tune(2000, 4000),
             min.node.size = 5,
             sample.fraction = 0.5,
-            mtry.ratio = 0.7,
+            mtry.ratio = to_tune(seq(0.2, 1, 0.2)),
             num.threads = 4
         )
     } else if (lnr.type == "xgboost") {
