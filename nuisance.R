@@ -17,7 +17,7 @@ generate_nuisance_learner <- function(lnr.type) {
     } else if (lnr.type == "xgboost") {
         learner <- lrn(
             "regr.xgboost",
-            nrounds = to_tune(100, 3000),
+            nrounds = to_tune(1, 6000),
             max_depth = 2,
             eta = 0.01,
             subsample = 0.5
@@ -51,7 +51,7 @@ tune_learner <- function(learner, task) {
         return(NA)
     } else {
         # Tune hyperparameter with 10-fold CV
-        tuner <- tune(tnr("grid_search", resolution = 20, batch_size = 10), task, learner, rsmp("cv", folds = 10))
+        tuner <- tune(tnr("grid_search", resolution = 50, batch_size = 10), task, learner, rsmp("cv", folds = 10))
         param <- tuner$result_learner_param_vals
         return(param)
     }
