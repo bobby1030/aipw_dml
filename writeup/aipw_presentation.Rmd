@@ -58,7 +58,7 @@ $$\begin{aligned}
 \end{aligned}$$
 
 - Treatment effect $\tau = 5$
-- Confounders are $X_1, X_3, X_5$. Modeling them is sufficient to recover ATE
+- Confounders are $X_1, X_3, X_5$. Modeling them is sufficient to recover ATE (Pearl, 1995)
 
 ---
 
@@ -102,6 +102,10 @@ We get $3 \times 3 \times 4 = 36$ ATE estimates per simulation.
 ---
 
 ### Procedures
+
+1. Generate 2000 samples from DGP
+2. Use 1st sample to tune hyperparameters (10-fold CV)
+3. Get ATE estimates with 2-fold crossfitting
 
 ---
 
@@ -249,10 +253,31 @@ ate_tau5_perf %>%
 
 ---
 
+# Empirical Power ( $\tau=5, H_0 = 0$ )
+
+```{R empirical-power}
+source("empirical_size.R")
+
+power <- ate_tau5_long %>% 
+  group_by(spec, lrn_type, estimator) %>%
+  group_modify(~ empirical_size(.x$ate, mu_null = 0)) %>% 
+  rename(power = size)
+
+ggplot(power, aes(x = estimator, y = power)) +
+  facet_grid(spec ~ lrn_type) +
+  geom_point() +
+  labs(
+    x = "Estimator",
+    y = "Empirical power"
+  ) +
+  theme(text = element_text(size = 16), panel.spacing.y = unit(1.5, "lines"))
+```
+
+---
+
 # Empirical Size
 
 ```{R empirical-size}
-source("empirical_size.R")
 
 ate_tau0 <- tibble()
 
@@ -287,3 +312,50 @@ ggplot(size, aes(x = estimator, y = size)) +
   theme(text = element_text(size = 16), panel.spacing.y = unit(1.5, "lines"))
 
 ```
+
+---
+
+# Promises AIPW can/cannot keep
+
+- AIPW is indeed doubly robust
+- But inverse-weighting based estimators suffer from sensitivity to extreme propensity scores
+  - It'll explode the estimate when $m(X)$ is close to 0 or 1
+  - High variance, lacks of power
+
+---
+
+## Distribution of Propensity Score
+
+```{R pscore-dist}
+source("generate_data.R")
+generate_data() %>% 
+  ggplot(aes(x = pscore, linetype = factor(D))) +
+  geom_density() +
+  labs(
+    x = "Propensity score",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 16)
+```
+
+---
+
+layout: true
+
+# Conclusions
+
+---
+
+Surprisingly, OLS (containing only 1st-order term) is not bad when relevent variables are included
+
+Still, it does not contain treatment assignment information which we sometimes are more confident with
+
+---
+
+What we want is doubly-robustness but stable to extreme propensity scores
+
+- Key: prevent extreme weighting
+- Some refinements are done:
+    - Normalized AIPW (Rostami, and Saarela 2021)
+    - Overlap weighting (Li, Morgan, and Zaslavsky 2018, JASA)
+        - off-the-shelf function implemented in `grf` R library
