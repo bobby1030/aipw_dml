@@ -3,7 +3,7 @@ library(mlr3learners)
 library(tidyverse)
 
 source("./generate_data.R")
-source("./estimation.R")
+source("./estimator.R")
 
 extract_cv_fitted_value <- function(rsmp_result) {
     prediction <- as.data.table(rsmp_result$prediction())
