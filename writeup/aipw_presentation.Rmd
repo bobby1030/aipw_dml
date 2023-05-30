@@ -64,6 +64,7 @@ $$\begin{aligned}
 
 ### Estimating Nuisance Functions
 
+.scale80[
 1. LASSO (`glmnet`)
   - `lambda`: tuned by CV
 2. Random Forests (`ranger`)
@@ -71,10 +72,11 @@ $$\begin{aligned}
   - `mtry`: tuned by CV
   - `sample.fraction` = 0.5
 3. Boosting (`xgboost`)
-  - `nrounds`: tuned by CV $\in [100,3000]$
+  - `nrounds`: tuned by CV $\in [1,6000]$
   - `max_depth` = 2,
   - `eta` = 0.01
-
+  - `subsample` = 0.5
+]
 
 ---
 
@@ -90,7 +92,7 @@ $$\begin{aligned}
 
 ### Estimators
 
-1. AIPW
+1. AIPW: $\hat\tau = g_1(X) - g_0(X) + \frac{D(Y - g_1(X))}{m(X)} - \frac{(1-D)(Y - g_0(X))}{1-m(X)}$
 2. IPW: $\hat\tau = \frac{D Y}{m(X)} - \frac{(1-D)Y}{1-m(X)}$
 3. OLS: $Y = \hat\tau D + X' \hat\beta + \hat \varepsilon$
 4. PLS: $(Y - \hat g(X)) = \hat\tau (D - \hat m(X)) + \hat \varepsilon$
@@ -265,7 +267,7 @@ power <- ate_tau5_long %>%
 
 ggplot(power, aes(x = estimator, y = power)) +
   facet_grid(spec ~ lrn_type) +
-  geom_point() +
+  geom_bar(stat = "identity") +
   labs(
     x = "Estimator",
     y = "Empirical power"
@@ -275,42 +277,23 @@ ggplot(power, aes(x = estimator, y = power)) +
 
 ---
 
-# Empirical Size
+# Empirical Size ( $\tau=5, H_0 = 5$ )
 
 ```{R empirical-size}
-
-ate_tau0 <- tibble()
-
-# Read results 
-for (spec in c("both", "pscore", "resp")) {
-    for (lrn_type in c("lasso", "rf", "xgboost")) {
-        result <- readRDS(sprintf("results/tau0/sim_result_%s_%s.rds", lrn_type, spec))
-        result$lrn_type <- lrn_type
-        result$spec <- spec
-        ate_tau0 <- bind_rows(ate_tau0, result)
-    }
-}
-
-size <- ate_tau0 %>% 
-  pivot_longer(starts_with("ate"), names_to = "estimator", values_to = "ate") %>% 
-  mutate(
-    lrn_type = ordered(lrn_type, levels = names(lrn_type_factor), labels = lrn_type_factor),
-    estimator = ordered(estimator, levels = names(estimator_factor), labels = estimator_factor)
-  ) %>% 
+size <- ate_tau5_long %>% 
   group_by(spec, lrn_type, estimator) %>%
-  group_modify(~ empirical_size(.x$ate, mu_null = 0))
+  group_modify(~ empirical_size(.x$ate, mu_null = 5))
 
 ggplot(size, aes(x = estimator, y = size)) +
   facet_grid(spec ~ lrn_type) +
-  geom_point() +
-  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = 0.05, linetype = "dashed", color = "#fe734d", linewidth = 1) +
   scale_y_continuous(breaks = c(0.05, seq(0.2, 1, 0.4))) +
   labs(
     x = "Estimator",
     y = "Empirical size"
   ) +
   theme(text = element_text(size = 16), panel.spacing.y = unit(1.5, "lines"))
-
 ```
 
 ---
@@ -318,7 +301,10 @@ ggplot(size, aes(x = estimator, y = size)) +
 # Promises AIPW can/cannot keep
 
 - AIPW is indeed doubly robust
-- But inverse-weighting based estimators suffer from sensitivity to extreme propensity scores
+- It works well when propensity score is not extreme
+  - E.g. the spec. that only response is correctly specified
+  - Higher efficiency than OLS
+- But the curse is that inverse-weighting based estimators suffer from sensitivity to extreme propensity scores
   - It'll explode the estimate when $m(X)$ is close to 0 or 1
   - High variance, lacks of power
 
@@ -333,7 +319,8 @@ generate_data() %>%
   geom_density() +
   labs(
     x = "Propensity score",
-    y = "Density"
+    y = "Density",
+    linetype = "Treatment (D)"
   ) +
   theme_minimal(base_size = 16)
 ```
@@ -354,7 +341,7 @@ Still, it does not contain treatment assignment information which we sometimes a
 
 What we want is doubly-robustness but stable to extreme propensity scores
 
-- Key: prevent extreme weighting
+- Key: Prevent extreme weighting
 - Some refinements are done:
     - Normalized AIPW (Rostami, and Saarela 2021)
     - Overlap weighting (Li, Morgan, and Zaslavsky 2018, JASA)
