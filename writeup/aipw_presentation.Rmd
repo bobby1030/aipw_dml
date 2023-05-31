@@ -36,8 +36,8 @@ output:
 - **Doubly-robustness**: consistent if either $m(x)$ or $g_d(X)$ are correctly specified
 
 $$\begin{aligned}
-\text{ATE}_{\text{AIPW}} = & g_1(X) - g_0(X) \\ 
-& + \frac{D(Y - g_1(X))}{m(X)} - \frac{(1-D)(Y - g_0(X))}{1-m(X)}
+\tau_{\text{AIPW}} = & \frac{1}{N} \sum_{i=1}^{N} \{ g_1(X_i) - g_0(X_i) \\ 
+                     & + \frac{D_i(Y_i - g_1(X_i))}{m(X_i)} - \frac{(1-D_i)(Y_i - g_0(X_i))}{1-m(X_i)} \}
 \end{aligned}$$
 
 ---
@@ -48,17 +48,22 @@ layout: true
 
 ---
 
+1. Can AIPW really keep its promise?
+2. The gains from using ML methods for nuisance function estimation?
+
+---
+
 ### DGP
 
 $$\begin{aligned}
 &Y = \tau D + X_1 X_2 + 4 \sin(\pi X_3X_4 ) + \exp({X_5}) + \varepsilon \\
 &\mathbb{P}(D=1 | X) = m(X) = \Phi(X_1 + X_3 + X_5 + X_1 X_3) \\
-&D = \operatorname{Bernoulli}(m(x)) \\
+&D \sim \operatorname{Bernoulli}(m(x)) \\
 &X_p \sim N(1,1), \; p=1, \cdots, 10 ; \;\; \varepsilon \sim N(0,1) \\ 
 \end{aligned}$$
 
 - Treatment effect $\tau = 5$
-- Confounders are $X_1, X_3, X_5$. Modeling them is sufficient to recover ATE (Pearl, 1995)
+- Confounders are $X_1, X_3, X_5$. Including them in the model used for estimation is sufficient to recover ATE
 
 ---
 
@@ -92,20 +97,20 @@ $$\begin{aligned}
 
 ### Estimators
 
-1. AIPW: $\hat\tau = g_1(X) - g_0(X) + \frac{D(Y - g_1(X))}{m(X)} - \frac{(1-D)(Y - g_0(X))}{1-m(X)}$
-2. IPW: $\hat\tau = \frac{D Y}{m(X)} - \frac{(1-D)Y}{1-m(X)}$
-3. OLS: $Y = \hat\tau D + X' \hat\beta + \hat \varepsilon$
-4. PLS: $(Y - \hat g(X)) = \hat\tau (D - \hat m(X)) + \hat \varepsilon$
+1. AIPW: $\hat\tau = \frac{1}{N} \sum_{i=1}^{N} [ g_1(X_i) - g_0(X_i) \\ + \frac{D_i(Y_i - g_1(X_i))}{m(X_i)} - \frac{(1-D_i)(Y_i - g_0(X_i))}{1-m(X_i)} ]$
+1. IPW: $\hat\tau = \frac{1}{N} \sum_{i=1}^{N} [\frac{D Y}{m(X)} - \frac{(1-D)Y}{1-m(X)}]$
+2. OLS: $Y = \hat\tau D + X' \hat\beta + \hat \varepsilon$
+3. PLS: $(Y - \hat g(X)) = \hat\tau (D - \hat m(X)) + \hat \varepsilon$
 
 --
 
-We get $3 \times 3 \times 4 = 36$ ATE estimates per simulation.
+We get $3 \times 3 \times 4 = 36$ ATE estimates per iteration.
 
 ---
 
 ### Procedures
 
-1. Generate 2000 samples from DGP
+1. Generate 2000 samples from DGP, each with 2000 observations
 2. Use 1st sample to tune hyperparameters (10-fold CV)
 3. Get ATE estimates with 2-fold crossfitting
 
@@ -346,3 +351,4 @@ What we want is doubly-robustness but stable to extreme propensity scores
     - Normalized AIPW (Rostami, and Saarela 2021)
     - Overlap weighting (Li, Morgan, and Zaslavsky 2018, JASA)
         - off-the-shelf function implemented in `grf` R library
+        - fast, and works quite well
